@@ -1,106 +1,141 @@
 import csv
 import sqlite3
+import os
 
-# Connect to the SQLite in-memory database
+# Global database connection
 conn = sqlite3.connect(':memory:')
-
-# A cursor object to execute SQL commands
 cursor = conn.cursor()
 
 
+def return_cursor():
+    """Returns the database cursor (Required for test cases)."""
+    return cursor
+
+
 def main():
+    """Main function to initialize database and process data."""
+    create_tables()
 
-    # users table
-    cursor.execute('''CREATE TABLE IF NOT EXISTS users (
-                        userId INTEGER PRIMARY KEY,
-                        firstName TEXT,
-                        lastName TEXT
-                      )'''
-                   )
+    # Define the resources directory
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(_file_), "../../resources"))
 
-    # callLogs table (with FK to users table)
-    cursor.execute('''CREATE TABLE IF NOT EXISTS callLogs (
-        callId INTEGER PRIMARY KEY,
-        phoneNumber TEXT,
-        startTime INTEGER,
-        endTime INTEGER,
-        direction TEXT,
-        userId INTEGER,
-        FOREIGN KEY (userId) REFERENCES users(userId)
-    )''')
+    # Define file paths
+    users_csv = os.path.join(base_dir, "users.csv")
+    call_logs_csv = os.path.join(base_dir, "callLogs.csv")
+    analytics_csv = os.path.join(base_dir, "userAnalytics.csv")
+    ordered_calls_csv = os.path.join(base_dir, "orderedCalls.csv")
 
-    # You will implement these methods below. They just print TO-DO messages for now.
-    load_and_clean_users('../../resources/users.csv')
-    load_and_clean_call_logs('../../resources/callLogs.csv')
-    write_user_analytics('../../resources/userAnalytics.csv')
-    write_ordered_calls('../../resources/orderedCalls.csv')
+    # Load and process data
+    try:
+        load_and_clean_users(users_csv)
+        load_and_clean_call_logs(call_logs_csv)
+        write_user_analytics(analytics_csv)
+        write_ordered_calls(ordered_calls_csv)
 
-    # Helper method that prints the contents of the users and callLogs tables. Uncomment to see data.
-    # select_from_users_and_call_logs()
+        # Uncomment to debug data:
+        # select_from_users_and_call_logs()
 
-    # Close the cursor and connection. main function ends here.
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+
+    # Close the connection
     cursor.close()
     conn.close()
 
 
-# TODO: Implement the following 4 functions. The functions must pass the unit tests to complete the project.
+def create_tables():
+    """Creates tables and ensures they start empty for testing consistency."""
+    cursor.execute("DROP TABLE IF EXISTS users")
+    cursor.execute("DROP TABLE IF EXISTS callLogs")
 
+    cursor.execute('''CREATE TABLE users (
+                        userId INTEGER PRIMARY KEY AUTOINCREMENT,
+                        firstName TEXT NOT NULL,
+                        lastName TEXT NOT NULL
+                      )''')
 
-# This function will load the users.csv file into the users table, discarding any records with incomplete data
+    cursor.execute('''CREATE TABLE callLogs (
+                        callId INTEGER PRIMARY KEY AUTOINCREMENT,
+                        phoneNumber TEXT,
+                        startTime INTEGER,
+                        endTime INTEGER,
+                        direction TEXT,
+                        userId INTEGER,
+                        FOREIGN KEY (userId) REFERENCES users(userId)
+                    )''')
+    conn.commit()
+
 def load_and_clean_users(file_path):
+    """Loads users from CSV into users table, discarding incomplete records."""
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"User CSV file not found: {file_path}")
 
-    print("TODO: load_users")
+    with open(file_path, 'r', newline='') as file:
+        reader = csv.reader(file)
+        next(reader)  # Skip header
+        for row in reader:
+            print(f"Checking row: {row}")  # Debugging output
+            if len(row) == 2 and all(row):  # Ensure exactly 2 fields and no missing values
+                cursor.execute("INSERT INTO users (firstName, lastName) VALUES (?, ?)", (row[0].strip(), row[1].strip()))
+
+    conn.commit()
+
+    # Print inserted data
+    cursor.execute("SELECT * FROM users")
+    users = cursor.fetchall()
+    print("Users inserted into DB:", users)  # Debugging output
 
 
-# This function will load the callLogs.csv file into the callLogs table, discarding any records with incomplete data
+
 def load_and_clean_call_logs(file_path):
+    """Loads call logs from CSV into callLogs table, discarding incomplete records."""
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Call Logs CSV file not found: {file_path}")
 
-    print("TODO: load_call_logs")
+    with open(file_path, 'r', newline='') as file:
+        reader = csv.reader(file)
+        next(reader)  # Skip header
+        for row in reader:
+            if len(row) == 5 and all(row):  # Ensure correct number of fields and no missing values
+                cursor.execute("INSERT INTO callLogs (phoneNumber, startTime, endTime, direction, userId) VALUES (?, ?, ?, ?, ?)",
+                               (row[0], int(row[1]), int(row[2]), row[3], int(row[4])))
+    conn.commit()
 
 
-# This function will write analytics data to testUserAnalytics.csv - average call time, and number of calls per user.
-# You must save records consisting of each userId, avgDuration, and numCalls
-# example: 1,105.0,4 - where 1 is the userId, 105.0 is the avgDuration, and 4 is the numCalls.
 def write_user_analytics(csv_file_path):
+    """Generates user analytics (avg call duration, call count) and writes to CSV."""
+    cursor.execute('''SELECT userId, 
+                             AVG(endTime - startTime) AS avgDuration, 
+                             COUNT(callId) AS numCalls 
+                      FROM callLogs GROUP BY userId''')
 
-    print("TODO: write_user_analytics")
+    with open(csv_file_path, 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["userId", "avgDuration", "numCalls"])  # CSV header
+        writer.writerows(cursor.fetchall())  # Write query results to CSV
 
 
-# This function will write the callLogs ordered by userId, then start time.
-# Then, write the ordered callLogs to orderedCalls.csv
 def write_ordered_calls(csv_file_path):
+    """Orders call logs by userId, then startTime, and writes to CSV."""
+    cursor.execute('''SELECT * FROM callLogs ORDER BY userId, startTime''')
 
-    print("TODO: write_ordered_calls")
+    with open(csv_file_path, 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["callId", "phoneNumber", "startTime", "endTime", "direction", "userId"])  # CSV header
+        writer.writerows(cursor.fetchall())  # Write query results to CSV
 
 
-
-# No need to touch the functions below!------------------------------------------
-
-# This function is for debugs/validation - uncomment the function invocation in main() to see the data in the database.
 def select_from_users_and_call_logs():
-
-    print()
-    print("PRINTING DATA FROM USERS")
-    print("-------------------------")
-
-    # Select and print users data
-    cursor.execute('''SELECT * FROM users''')
-    for row in cursor:
+    """Prints users and callLogs data for debugging."""
+    print("\nPRINTING DATA FROM USERS\n-------------------------")
+    cursor.execute("SELECT * FROM users")
+    for row in cursor.fetchall():
         print(row)
 
-    # new line
-    print()
-    print("PRINTING DATA FROM CALLLOGS")
-    print("-------------------------")
-
-    # Select and print callLogs data
-    cursor.execute('''SELECT * FROM callLogs''')
-    for row in cursor:
+    print("\nPRINTING DATA FROM CALLLOGS\n-------------------------")
+    cursor.execute("SELECT * FROM callLogs")
+    for row in cursor.fetchall():
         print(row)
-
-
-def return_cursor():
-    return cursor
 
 
 if __name__ == '__main__':

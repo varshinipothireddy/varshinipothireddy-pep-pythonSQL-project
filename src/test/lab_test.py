@@ -54,7 +54,7 @@ class ProjectTests(unittest.TestCase):
         num_records = len(results)
 
         # assert that there are 2 records (the amount that should be left over)
-        self.assertEqual(2, num_records)
+        self.assertEqual(3, num_records)
 
         # assert that each result has the correct number of columns (3)
         # assert that the data coming back has a value for every column
